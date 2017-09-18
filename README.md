@@ -3,22 +3,18 @@ A CLI Tool to Import audio files via the HTTP API. Written in Python.
 
 # Usage:
 
-- Non SSL -> ./sinusbot_uploader.py 123.124.125.1 8087 admin foobar /myfolder
-- SSL -> ./sinusbot_uploader.py 123.124.125.1 8087 admin foobar /myfolder SSL
+```
+usage: ./sinusbot_uploader.py [ -h hostname ] [ -p port] [ -U user ] [ -P password ] [ -b remote_dir_uuid ] [ -r ] [ -s ] LOCAL_DIRECTORY
 
-# Result:
+  args:
+    LOCAL_DIRECTORY    directory to upload
 
-xuxe@sinus:~$ python ./sinusbot_upload.py 127.0.0.1 8087 admin foobar /home/xuxe/test/ </br>
-Success Authenticated! </br>
-Success uploaded: /home/xuxe/test/The+Echelon+Effect+-+Your+First+Light+My+Eventide.mp3 </br>
-Success uploaded: /home/xuxe/test/subdir/Glowworm+-+Periphescence.mp3 </br>
-Success uploaded: /home/xuxe/test/subdir/Death+Grips+-+Come+Up+and+Get+Me.mp3 </br>
-Completed -> Uploaded 3 files with 0 errors. </br>
-
-
-
-SUPPORTED FILE TYPES: extensions=['mp3', 'mp4', 'wav', '3gp'] - i have added at the moment only mp3, mp4, wav and 3gp. If you need others you can add your own or report it and i will add it! 
-
-I tested it only on Python 2.7 Debian & Ubuntu. 
-
-If you encounter an issue open a Report here: [Report a bug] (https://github.com/Xuxe/Sinusbot-File-Importer/issues/new) - Please apply the backtrace! :)
+  options:
+    -h, --host         API hostname (default: 127.0.0.1)
+    -p, --port         API port (default: 8087)
+    -U, --user         auth username (default: sinus)
+    -P, --password     auth password (default: sinus)
+    -r, --recursive    process directory recursively
+    -s, --ssl          enable SSL (disabled by default)
+    -b, --base         specify remote base directory uuid (default: empty for the root
+```
