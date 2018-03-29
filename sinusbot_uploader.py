@@ -8,6 +8,8 @@ import httplib
 import os.path
 import getopt
 
+from mutagen.easyid3 import EasyID3
+
 class Sinusbot:
 	jwt_token = '' 		#Auth Token
 	botId = ''			#Bot ID required for the Login
@@ -19,7 +21,8 @@ class Sinusbot:
 	success_count = 0
 	error_count = 0
 	extensions=['mp3', 'mp4', 'wav', '3gp','flac']
-	ignore_dirs=['Scans']
+	ignore_dirs=['Scans','covers','Cover','covers_ver.1','covers_ver.2']
+	json_files_list = None
 
 	def __init__(self, url, port, username, password, ssl):
 		self.url = url
@@ -34,16 +37,15 @@ class Sinusbot:
 	def DefaultId(self):
 		c = httplib.HTTPSConnection(self.url, self.port) if self.ssl else httplib.HTTPConnection(self.url, self.port)
 
-		conn.request("GET", "/api/v1/botId")
-		response = conn.getresponse()
+		c.request("GET", "/api/v1/botId")
+		response = c.getresponse()
 
 		if response.status == 200:
-			r = response.read()
-			j = json.loads(r)
-			conn.close()
+			j = json.loads(response.read())
+			c.close()
 			return j['defaultBotId']
 		else:
-			conn.close()
+			c.close()
 			return ''
 
 	def Auth(self):
@@ -52,8 +54,8 @@ class Sinusbot:
 		data =  {"username":self.username, "password":self.password, "botId": str(self.botId)}  #Parse the botId with str() to pre event a golang error in case of unicode
 		hdr = {"Content-type": "application/json"}
 
-		conn.request("POST", "/api/v1/bot/login", json.dumps(data), hdr)
-		response = conn.getresponse()
+		c.request("POST", "/api/v1/bot/login", json.dumps(data), hdr)
+		response = c.getresponse()
 
 		if response.status == 200:
 			response = str(response.read())
@@ -61,20 +63,20 @@ class Sinusbot:
 			
 			try:
 					self.jwt_token = j['token']
-					conn.close()
+					c.close()
 					self.username = ''
 					self.password = '' 
 					return True
 					
 				
 			except:	
-					conn.close()
+					c.close()
 					print 'Could not get token: %s' % (response)
 					return False
 			
 		
 		else:
-			conn.close()
+			c.close()
 			return False
 			
 	def Upload(self, LocalPath, destination_folder_uuid = None):
@@ -96,20 +98,48 @@ class Sinusbot:
 
 		if destination_folder_uuid:
 			query = "/api/v1/bot/upload?folder=%s" % unicode(destination_folder_uuid)
-			conn.request("POST", str(query), bytes, hdr)
+			c.request("POST", str(query), bytes, hdr)
 		else:
-			conn.request("POST", "/api/v1/bot/upload", bytes, hdr)
+			c.request("POST", "/api/v1/bot/upload", bytes, hdr)
 
-		response = conn.getresponse()
+		response = c.getresponse()
 
 		if response.status == 200:
-			conn.close()
+			c.close()
 			self.success_count += 1
 			return True
 		else:
-			conn.close()
+			print "got status : " + str(response.status)
+			print "body: " + str(response.read())
+			c.close()
 			self.error_count += 1
 			return False
+
+	def checkFile(self,name, folder_uuid):
+
+		#name = unicode(name, "utf-8")
+		#print "checkFile('%s',%s)" % (name,folder_uuid)
+
+		if not self.json_files_list:
+			hdr = {"Content-type": "application/json", "Authorization": "bearer " + str(self.jwt_token) }
+			c = httplib.HTTPSConnection(self.url, self.port) if self.ssl else httplib.HTTPConnection(self.url, self.port)
+
+			c.request("GET", "/api/v1/bot/files", None, hdr)
+			r = c.getresponse()
+			if r.status != 200:
+				raise Exception('failed to load files list')
+			r = str(r.read())
+
+			self.json_files_list = json.loads(r)
+
+		#print self.json_files_list
+
+		jf = filter(lambda f: "title" in f and f["title"]==name and f["parent"]==folder_uuid, self.json_files_list)
+		if jf:
+			uuid = jf[0]['uuid']
+			#print "file '%s' exists with uuid %s" % (name, uuid)
+			return True
+		return False
 
 	def ensureFolder(self, name, parent_folder_uuid = ""):
 		data = { "name": name, "parent": parent_folder_uuid }
@@ -118,7 +148,7 @@ class Sinusbot:
 			parent_folder_uuid = ""
 
 		name = unicode(name, "utf-8")
-		print "ensureFolder('%s',%s)" % (name,parent_folder_uuid)
+		#print "ensureFolder('%s',%s)" % (name,parent_folder_uuid)
 
 		hdr = {"Content-type": "application/json", "Authorization": "bearer " + str(self.jwt_token) }
 		c = httplib.HTTPSConnection(self.url, self.port) if self.ssl else httplib.HTTPConnection(self.url, self.port)
@@ -139,7 +169,7 @@ class Sinusbot:
 		jf = filter(lambda f: f["type"]=="folder" and f["title"]==name and f["parent"]==parent_folder_uuid, j)
 		if jf:
 			uuid = jf[0]['uuid']
-			print "folder '%s' exists. return uuid %s" % (name, uuid)
+			#print "folder '%s' exists. return uuid %s" % (name, uuid)
 			return uuid
 
 		c.request("POST", "/api/v1/bot/folders", json.dumps(data), hdr)
@@ -181,6 +211,13 @@ def uploadHelper(directory, bot, recurse, parent_uuid = None):
 			if (fileExtension not in bot.extensions):
 				#~ print 'File type not supported: ' + entryTruePath
 				continue
+
+			if fileExtension=='mp3':
+				mp3_tags = EasyID3(entryTruePath)
+				mp3_title = mp3_tags['title'][0]
+				if bot.checkFile(mp3_title,uuid):
+					#print 'skip existent file: ' + entryTruePath
+					continue
 
 			if bot.Upload(entryTruePath,uuid):
 				print 'Success uploaded: ' + entryTruePath
